@@ -277,7 +277,7 @@ class Score:
 
 class SpecialShot:
     """
-    必殺技に関するクラス
+    必殺技に関するクラス(Eキーを押したら発動予定)
     """
     EXP = 100 # 特殊ビーム発射に必要なスコア
     FREEZE_DURATION_FRAMES = 3 * 50 # 凍結時間（フレーム数）
