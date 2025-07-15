@@ -1,46 +1,16 @@
 import os
-import time 
-import pygame as pg
+import random
 import sys
-import math
-import random 
-from typing import Callable, List
+import time
+import pygame as pg
 
+# --- 定数 ---
 WIDTH = 1100  # ゲームウィンドウの幅
 HEIGHT = 650  # ゲームウィンドウの高さ
-save_score = 0
-save_lv = 0
+NUM_OF_BOMBS = 5  # 爆弾の数
+
+# スクリプトの実行ディレクトリに移動
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-
-def menu():
-    """
-    メインメニューに関する関数
-    """
-    pg.init()
-    pg.display.set_caption("生きろこうかとん！")
-    bg_img = pg.image.load(f"fig/menu_bg.jpg")
-    screen = pg.display.set_mode((WIDTH, HEIGHT))
-    
-    fonto1 = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 80)
-    txt1 = fonto1.render("生きろこうかとん!", True, (255, 255, 255))
-    fonto2 = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 50)
-    txt2 = fonto2.render("PRESS SPACE TO START", True, (255, 255, 255))
-
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                return 0
-            if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
-                main(screen)
-                time.sleep(1)
-                GameOver(screen)
-                return 0
-            
-        screen.blit(bg_img, [0, 0])
-        screen.blit(txt1, [235, 200])
-        screen.blit(txt2, [315, 500])
-        pg.display.update()
 
 
 def check_bound(obj_rct: pg.Rect) -> tuple[bool, bool]:
@@ -57,43 +27,38 @@ def check_bound(obj_rct: pg.Rect) -> tuple[bool, bool]:
     return yoko, tate
 
 
-class Bird(pg.sprite.Sprite):
+class Bird:
     """
-    こうかとんの実装に関するクラス
+    ゲームキャラクター（こうかとん）に関するクラス
     """
-
     delta = {  # 押下キーと移動量の辞書
-        pg.K_UP: (0, -1),
-        pg.K_DOWN: (0, +1),
-        pg.K_LEFT: (-1, 0),
-        pg.K_RIGHT: (+1, 0),
+        pg.K_UP: (0, -5),
+        pg.K_DOWN: (0, +5),
+        pg.K_LEFT: (-5, 0),
+        pg.K_RIGHT: (+5, 0),
+    }
+    img0 = pg.transform.rotozoom(pg.image.load("fig/3.png"), 0, 0.9)
+    img = pg.transform.flip(img0, True, False)  # デフォルトのこうかとん（右向き）
+    imgs = {  # 0度から反時計回りに定義
+        (+5, 0): img,  # 右
+        (+5, -5): pg.transform.rotozoom(img, 45, 0.9),  # 右上
+        (0, -5): pg.transform.rotozoom(img, 90, 0.9),  # 上
+        (-5, -5): pg.transform.rotozoom(img0, -45, 0.9),  # 左上
+        (-5, 0): img0,  # 左
+        (-5, +5): pg.transform.rotozoom(img0, 45, 0.9),  # 左下
+        (0, +5): pg.transform.rotozoom(img, -90, 0.9),  # 下
+        (+5, +5): pg.transform.rotozoom(img, -45, 0.9),  # 右下
     }
 
-    def __init__(self, num: int, xy:tuple[int, int]):
+    def __init__(self, xy: tuple[int, int]):
         """
         こうかとん画像Surfaceを生成する
-        引数1 num：こうかとん画像ファイル名の番号
-        引数2 xy：こうかとん画像の位置座標タプル
+        引数 xy：こうかとん画像の初期位置座標タプル
         """
-        super().__init__()
-        img0 = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 0.9)
-        img = pg.transform.flip(img0, True, False)  # デフォルトのこうかとん
-        self.imgs = {
-            (+1, 0): img,  # 右
-            (+1, -1): pg.transform.rotozoom(img, 45, 0.9),  # 右上
-            (0, -1): pg.transform.rotozoom(img, 90, 0.9),  # 上
-            (-1, -1): pg.transform.rotozoom(img0, -45, 0.9),  # 左上
-            (-1, 0): img0,  # 左
-            (-1, +1): pg.transform.rotozoom(img0, 45, 0.9),  # 左下
-            (0, +1): pg.transform.rotozoom(img, -90, 0.9),  # 下
-            (+1, +1): pg.transform.rotozoom(img, -45, 0.9),  # 右下
-        }
-        self.dire = (+1, 0)
-        self.image = self.imgs[self.dire]
-        self.rect = self.image.get_rect()
-        self.rect.center = xy
-        self.speed = 10
-        self.hp = 3
+        self.img = __class__.imgs[(+5, 0)]
+        self.rct: pg.Rect = self.img.get_rect()
+        self.rct.center = xy
+        self.dire = (+5, 0) # こうかとんの向きを表すタプルを定義
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -101,8 +66,8 @@ class Bird(pg.sprite.Sprite):
         引数1 num：こうかとん画像ファイル名の番号
         引数2 screen：画面Surface
         """
-        self.image = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 0.9)
-        screen.blit(self.image, self.rect)
+        self.img = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 0.9)
+        screen.blit(self.img, self.rct)
 
     def update(self, key_lst: list[bool], screen: pg.Surface):
         """
@@ -115,417 +80,260 @@ class Bird(pg.sprite.Sprite):
             if key_lst[k]:
                 sum_mv[0] += mv[0]
                 sum_mv[1] += mv[1]
-        self.rect.move_ip(self.speed*sum_mv[0], self.speed*sum_mv[1])
-        if check_bound(self.rect) != (True, True):
-            self.rect.move_ip(-self.speed*sum_mv[0], -self.speed*sum_mv[1])
+        self.rct.move_ip(sum_mv)
+        if check_bound(self.rct) != (True, True):
+            self.rct.move_ip(-sum_mv[0], -sum_mv[1])
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
-            self.dire = tuple(sum_mv)
-            self.image = self.imgs[self.dire]
-        screen.blit(self.image, self.rect)
+            if tuple(sum_mv) in __class__.imgs:
+                self.img = __class__.imgs[tuple(sum_mv)]
+            self.dire = tuple(sum_mv) # 合計移動量sum_mvが[0,0]でない時，self.direをsum_mvの値で更新
+        screen.blit(self.img, self.rct)
 
-
-class Enemy(pg.sprite.Sprite):
+class Beam:
     """
-    敵キャラのクラス
+    こうかとんが放つビームに関するクラス
     """
-    def __init__(self, bird: Bird, tmr: int):
-        super().__init__()
-        self.type = random.randint(0, 2)  # ランダムに種類を変える
+    DIRE_DATA = {
+        # こうかとんが右向き (+5, 0)
+        (+5, 0): {
+            "center": ((+1, 0), 0),   # 0度
+            "left":   ((+0.8, -0.8), 30), 
+            "right":  ((+0.8, +0.8), -30), 
+        },
+        # こうかとんが左向き 
+        (-5, 0): {
+            "center": ((-1, 0), 180), 
+            "left":   ((-0.8, +0.8), -150), 
+            "right":  ((-0.8, -0.8), 150), 
+        },
+        # こうかとんが上向き 
+        (0, -5): {
+            "center": ((0, -1), 90), 
+            "left":   ((+0.5, -0.8), 60),   
+            "right":  ((-0.5, -0.8), 120), 
+        },
+        # こうかとんが下向き 
+        (0, +5): {
+            "center": ((0, +1), -90), 
+            "left":   ((-0.5, +0.8), -120), 
+            "right":  ((+0.5, +0.8), -60), 
+        },
+        # 以下、斜め方向 
+        (+5, -5): { # 右上
+            "center": ((0.707, -0.707), 45),
+            "left":   ((0.966, -0.259), 15), 
+            "right":  ((0.259, -0.966), 75), 
+        },
+        (-5, -5): { # 左上
+            "center": ((-0.707, -0.707), 135),
+            "left":   ((-0.259, -0.966), 105), 
+            "right":  ((-0.966, -0.259), 165),
+        },
+        (-5, +5): { # 左下
+            "center": ((-0.707, 0.707), -135),
+            "left":   ((-0.966, 0.259), -165),
+            "right":  ((-0.259, 0.966), -105), 
+        },
+        (+5, +5): { # 右下
+            "center": ((0.707, 0.707), -45),
+            "left":   ((0.259, 0.966), -75), 
+            "right":  ((0.966, 0.259), -15), 
+        },
+    }
 
-        if self.type == 0:
-            self.image = pg.transform.rotozoom(pg.image.load("fig/alien1.png"), 0, 0.6)
-            self.image.fill((100, 255, 100, 255), special_flags=pg.BLEND_RGBA_MULT)
-            self.speed = 2
-        elif self.type == 1:
-            self.image = pg.transform.rotozoom(pg.image.load("fig/alien2.png"), 0, 0.5)
-            self.image.fill((100, 100, 255, 255), special_flags=pg.BLEND_RGBA_MULT)
-            self.speed = 3
-        else:
-            self.image = pg.transform.rotozoom(pg.image.load("fig/alien3.png"), 0, 0.4)
-            self.image.fill((255, 100, 100, 255), special_flags=pg.BLEND_RGBA_MULT)
-            self.speed = 4
-
-        self.rect = self.image.get_rect()
-
-        # スポーン位置
-        edge = random.choice(["top", "bottom", "left", "right"])
-        if edge == "top":
-            self.rect.center = (random.randint(0, WIDTH), -50)
-        elif edge == "bottom":
-            self.rect.center = (random.randint(0, WIDTH), HEIGHT + 50)
-        elif edge == "left":
-            self.rect.center = (-50, random.randint(0, HEIGHT))
-        else:
-            self.rect.center = (WIDTH + 50, random.randint(0, HEIGHT))
-
-        self.bird = bird
-        self.is_frozen = False
-        self.freeze_timer = 0
-    
-
-    def update(self):
-        """
-        敵がこうかとんを追従するように設定
-        """
-        if not self.is_frozen: # 凍結中でなければ移動
-            dx = self.bird.rect.centerx - self.rect.centerx
-            dy = self.bird.rect.centery - self.rect.centery
-            dist = math.hypot(dx, dy)
-            if dist != 0:
-                dx, dy = dx / dist, dy / dist
-            self.rect.move_ip(dx * self.speed, dy * self.speed)
-        else: # 凍結中のタイマーを減らす
-            self.freeze_timer -= 1
-            if self.freeze_timer <= 0:
-                self.unfreeze()
-
-    def freeze(self):
-        """敵を凍結状態にする"""
-        self.is_frozen = True
-        self.freeze_timer = 3 * 50 # 3秒 * 50fps = 150フレーム
-
-    def unfreeze(self):
-        """敵の凍結状態を解除する"""
-        self.is_frozen = False
-        self.freeze_timer = 0
-# Weaponクラスの前にSpecialShotクラスを追加
- 
-
-class Beam(pg.sprite.Sprite):
-    """
-    ビームに関するクラス
-    """
-    def __init__(self, bird: Bird, angle0 = 0, size: float = 1.0, is_special: bool = False):
+    def __init__(self, bird:"Bird", beam_type: str = "center", size:float = 1.0, is_special:bool = False):
         """
         ビーム画像Surfaceを生成する
-        引数 bird：ビームを放つこうかとん
+        引数 bird：ビームを放つこうかとん（Birdインスタンス）
+        引数 beam_type：ビームの種類 ("center", "left", "right")
         """
-        super().__init__()
-        self.vx, self.vy = bird.dire
-        angle = math.degrees(math.atan2(-self.vy, self.vx)) + angle0
-        self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, size)
-        self.vx = math.cos(math.radians(angle))
-        self.vy = -math.sin(math.radians(angle))
-        self.rect = self.image.get_rect()
-        self.rect.centery = bird.rect.centery+bird.rect.height*self.vy
-        self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
-        self.speed = 10
-        self.is_special = is_special
+        # こうかとんの基本の向きを取得
+        base_dire = bird.dire
+        if base_dire not in Beam.DIRE_DATA:
+            base_dire = (+5, 0) # デフォルトを右向きにする
 
-    def update(self):
+        dire_info = Beam.DIRE_DATA.get(base_dire, Beam.DIRE_DATA[(+5, 0)])[beam_type]
+        self.vx, self.vy = dire_info[0] # 速度の係数
+        angle = dire_info[1] # 回転角度
+
+        # 画像をロードし、指定された角度で回転
+        self.img = pg.transform.rotozoom(pg.image.load("fig/beam.png"), angle, size)
+        
+        self.rct = self.img.get_rect()
+        self.rct.centerx = bird.rct.centerx + bird.rct.width * self.vx / 2 # 調整
+        self.rct.centery = bird.rct.centery + bird.rct.height * self.vy / 2 # 調整
+        self.is_special = is_special
+        
+    def update(self, screen: pg.Surface):
         """
         ビームを速度ベクトルself.vx, self.vyに基づき移動させる
         引数 screen：画面Surface
         """
-        self.rect.move_ip(self.speed*self.vx, self.speed*self.vy)
-        if check_bound(self.rect) != (True, True):
-            if not self.is_special: 
-                self.kill()
-            elif self.is_special and (self.rect.left > WIDTH + 50 or self.rect.right < -50 or self.rect.top > HEIGHT + 50 or self.rect.bottom < -50):
-                self.kill()
-
-
-class SpecialShot:
+        if check_bound(self.rct) == (True, True):
+            # 速度ベクトルの大きさを調整 
+            self.rct.move_ip(self.vx*10, self.vy*10)
+            screen.blit(self.img, self.rct)
+            return self # 画面内にいる場合は自身を返す
+        else:
+            return None # 画面外に出たらNoneを返す
+        
+class Bomb:
     """
-    必殺技に関するクラス
+    爆弾に関するクラス
     """
-    EXP_COST = 100 # 特殊ビーム発射に必要なスコア
-
-    def __init__(self):
+    def __init__(self, color: tuple[int, int, int], rad: int):
         """
-        SpecialShotの初期設定を行う
+        引数に基づき爆弾円Surfaceを生成する
+        引数1 color：爆弾円の色タプル
+        引数2 rad：爆弾円の半径
         """
-        pass
+        self.img = pg.Surface((2*rad, 2*rad))
+        pg.draw.circle(self.img, color, (rad, rad), rad)
+        self.img.set_colorkey((0, 0, 0))
+        self.rct = self.img.get_rect()
+        self.rct.center = random.randint(0, WIDTH), random.randint(0, HEIGHT)
+        self.vx, self.vy = +5, +5
 
-    def activate(self, bird: "Bird", score: "Score", enemies: pg.sprite.Group, beams: pg.sprite.Group) -> bool:
+    def update(self, screen: pg.Surface):
         """
-        特殊ビームを発射し、敵を凍結させる処理を行う。
-        発動に成功したらTrue、失敗したらFalseを返す。
-        引数 bird: こうかとんインスタンス
-        引数 score: スコアインスタンス
-        引数 enemies: 敵グループ
-        引数 beams: ビームグループ
+        爆弾を速度ベクトルself.vx, self.vyに基づき移動させる
+        引数 screen：画面Surface
         """
-        if score.value >= SpecialShot.EXP_COST:
-            # 特大ビームを発射 (size=3.0, is_special=True)
-            beams.add(Beam(bird, 0, 3.0, True))
-            score.value -= SpecialShot.EXP_COST # スコアを消費
 
-            # 全ての敵を一定時間停止させる
-            for enemy in enemies:
-                enemy.freeze()
-            return True
-        return False       
-
-
-class NeoBeam:
+class Explosion:
     """
-    弾幕に関するクラス
+    爆発エフェクトに関するクラス
     """
-    def __init__(self, bird:Bird, num:int):
-        self.bird = bird
-        self.num = num
-
-    def gen_beams(self):
+    def __init__(self, obj_rct: pg.Rect):
         """
-        それぞれのビームの角度を計算しタプルで返す
+        爆発エフェクトの画像Surfaceを生成する
+        引数 obj_rct：爆発するオブジェクトのRect
         """
-        beams = []
-        for angle in range(-50, +51, int(100/(self.num-1))):
-            beam = Beam(self.bird, angle)
-            beams.append(beam)
-        return beams
+        original_img = pg.image.load("fig/explosion.gif")
+        self.imgs = [original_img, pg.transform.flip(original_img, True, True)]
+        self.img_idx = 0
+        self.img = self.imgs[self.img_idx]
+        self.rct = self.img.get_rect(center=obj_rct.center)
+        self.life = 20
 
+    def update(self, screen: pg.Surface):
+        """
+        爆発エフェクトを表示する
+        引数 screen：画面Surface
+        """
+        if self.life > 0:
+            self.img = self.imgs[self.img_idx % 2]
+            screen.blit(self.img, self.rct)
+            self.img_idx += 1
+            self.life -= 1
+            return self
+        else:
+            return None
 
 class Score:
     """
-    スコアの計算に関するクラス
+    スコアに関するクラス
     """
     def __init__(self):
         """
-        撃ち落とした敵などの数を計算し表示するクラス
+        スコア表示の初期設定を行うイニシャライザ
         """
-        self.font = pg.font.Font(None, 50)
+        self.fonto = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 30)
         self.color = (0, 0, 255)
         self.value = 0
-        self.lv = 1
-        self.next_exp = 10 # 次のレベルまでの経験値
-        self.image = self.font.render(f"Score: {self.value}", 0, self.color)
-        self.rect = self.image.get_rect()
-        self.rect.center = 150, HEIGHT-50
+        self.img = self.fonto.render(f"Score: {self.value}", 0, self.color)
+        self.rct = self.img.get_rect()
+        self.rct.bottomleft = (100, HEIGHT - 50)
 
-    def gain_exp(self, exp: int):
+    def update(self, screen: pg.Surface):
         """
-        スコアに経験値を加算し，レベルアップの判定を行う
-        引数 exp：加算する経験値
+        現在のスコアを表示させる文字列Surfaceを生成し、スクリーンにblitする
+        引数 screen：画面Surface
         """
-        self.value += exp
-        if self.value >= self.next_exp:
-            self.lv += 1
-            self.next_exp += int(self.lv * 10)  # 次のレベルアップまでの経験値を増加
-
-    def update(self, screen:pg.Surface):
-        self.image = self.font.render(f"Score: {self.value}  Level:{self.lv}", 0, self.color)
-        screen.blit(self.image, self.rect)
+        self.img = self.fonto.render(f"Score: {self.value}", 0, self.color)
+        screen.blit(self.img, self.rct)
 
 
-def GameOver(screen:pg.Surface):
-    """
-    gameoverに関する関数
-    """
-    fin_img = pg.Surface((WIDTH, HEIGHT))
-    pg.draw.rect(fin_img, (0, 0, 0), (0, 0, WIDTH, HEIGHT), 0)
-    fin_img.set_alpha(128)
+def main():
+    pg.display.set_caption("たたかえ！こうかとん")
+    screen = pg.display.set_mode((WIDTH, HEIGHT))    
+    bg_img = pg.image.load("fig/pg_bg.jpg")
+    bird = Bird((300, 200))
+    bombs = [Bomb((255, 0, 0), 10) for _ in range(NUM_OF_BOMBS)]
+    beams = []  # 複数のビームを管理するための空のリスト
+
+    explosions = []
+    score = Score()
+    special_shot_manager = SpecialShot() # SpecialShotインスタンスを作成
     
-    fonto1 = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 100)
-    txt1 = fonto1.render("GAME OVER", True, (255, 255, 255))
-    fonto2 = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 80)
-    txt2 = fonto2.render(f"Score:{save_score}  Level:{save_lv}", True, (255, 255, 255))
-    fonto3 = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 50)
-    txt3 = fonto3.render("PRESS SPACE TO RESTART", True, (255, 255, 255))
-
+    clock = pg.time.Clock()
+    tmr = 0
     while True:
         for event in pg.event.get():
             if event.type == pg.QUIT:
-                return 0
-            if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
-                main(screen)
-                GameOver(screen)
-                return 0
-            
-        screen.blit(fin_img, [0, 0])
-        screen.blit(txt1, [325, 200])
-        screen.blit(txt2, [240, 400])
-        screen.blit(txt3, [300, 500])
-        pg.display.update()
-
-
-class BirdHpUI:
-    """
-    こうかとんのHPのUIに関するクラス
-    """
-    def __init__(self, bird:Bird):
-        self.font = pg.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 30)
-        self.color = (255, 0, 0)
-        self.value = bird.hp
-        self.image = self.font.render(f"残りHP: {self.value}", 0, self.color)
-        self.rect = self.image.get_rect()
-        self.rect.center = 1000, HEIGHT-50
-
-    def update(self, screen:pg.Surface, bird:Bird):
-        self.value = bird.hp
-        self.image = self.font.render(f"残りHP: {self.value}", 0, self.color)
-        screen.blit(self.image, self.rect)
-
-
-
-class Explosion(pg.sprite.Sprite):
-    """
-    爆発に関するクラス
-    """
-    def __init__(self, obj: Enemy, life: int):
-        """
-        爆弾が爆発するエフェクトを生成する
-        引数1 obj：爆発するBombまたは敵機インスタンス
-        引数2 life：爆発時間
-        """
-        super().__init__()
-        img = pg.image.load(f"fig/explosion.gif")
-        self.imgs = [img, pg.transform.flip(img, 1, 1)]
-        self.image = self.imgs[0]
-        self.rect = self.image.get_rect(center=obj.rect.center)
-        self.life = life
-
-    def update(self):
-        """
-        爆発時間を1減算した爆発経過時間_lifeに応じて爆発画像を切り替えることで
-        爆発エフェクトを表現する
-        """
-        self.life -= 1
-        self.image = self.imgs[self.life//10%2]
-        if self.life < 0:
-            self.kill()
-
-class Weapon:
-    """1種類の武器情報を保持するクラス"""
-    
-    def __init__(
-        self,
-        name:str,
-        cooldown:float,
-        fire_func: Callable[[Bird], List[pg.sprite.Sprite]], # 発射関数
-    ) -> None: 
-        self.name = name 
-        self.cooldown = cooldown
-        self._fire_func = fire_func 
-        self._last_fire_time = 0.0
-        
-    def _ready(self) -> bool: # クールダウン経過判定
-        """クールダウン経過判定"""
-        return time.time() - self._last_fire_time >= self.cooldown # クールダウン時間を超えたかどうか
-    
-    def fire(self, bird: Bird) -> List[pg.sprite.Sprite]: # 発射処理
-        """武器を発射し、生成された弾Spriteを返す"""
-        if not self._ready(): 
-            return[] # クールダウン中は何もしない
-        self._last_fire_time = time.time() # 最後の発射時間を更新
-        return self._fire_func(bird) # 発射関数を呼び出して弾を生成 
-
-
-class WeaponSystem: 
-    """複数武器を切替・発射するマネージャー。"""
-    
-    def __init__(self, player: Bird) -> None: # 武器システムの初期化
-        self._player = player # 武器を発射するプレイヤー
-        self._weapons: list[Weapon] = [] # 武器のリスト
-        self._idx = 0  # 現在の武器のインデックス
-        
-    def add(self, weapon) -> None:
-        self._weapons.append(weapon) # 武器を追加
-        
-    def next(self) -> None:
-        """次の武器に切り替える"""
-        if self._weapons: # 武器が存在する場合
-            self._idx = (self._idx + 1) % len(self._weapons) # 循環する
-            
-    @property # 現在の武器を取得
-    def current(self) -> Weapon: # 現在の武器を返す
-        return self._weapons[self._idx] 
-    
-    def fire(self) -> List[pg.sprite.Sprite]: # 現在の武器を発射
-        return self.current.fire(self._player)
-
-
-def main(screen:pg.Surface):
-    pg.init()
-    bg_img = pg.image.load(f"fig/stage.png") 
-    
-    score  = Score()
-    beams = pg.sprite.Group()
-    enemies = pg.sprite.Group()  # 敵管理用グループ
-    exps = pg.sprite.Group()
-    bird = Bird(3, (900, 400))
-    b_hp_ui = BirdHpUI(bird)
-    # 武器システム設定
-    weapon_system = WeaponSystem(bird)
-    weapon_system.add(Weapon("Beam", 0.15, lambda b: [Beam(b)])) # 通常のビームを放つ
-    weapon_system.add(Weapon("Spread", 0.8, lambda b: NeoBeam(b, 3+int(score.lv//5)).gen_beams())) # 3+lvの数でビームを放つ
-    special_shot_manager = SpecialShot() # SpecialShotインスタンスを作成
-
-
-    clock = pg.time.Clock()
-
-    tmr = 0
-    pg.mixer.init()
-    pg.mixer.music.load("bgm/maou_game_dangeon19.mp3") #bgmの設定
-    pg.mixer.music.play(-1)
-    sound_effect = pg.mixer.Sound("bgm/8bit_shoot2.mp3") #効果音の設定
-    sound_effect.set_volume(0.7)
-
-    while True:
-        key_lst = pg.key.get_pressed() 
-        for event in pg.event.get(): 
-            if event.type == pg.QUIT: # ウィンドウの×ボタンで終了
-                return 0
+                return
             if event.type == pg.KEYDOWN:
-                if event.key == pg.K_TAB: # TABキーで武器を切り替え
-                    weapon_system.next()
-                elif event.key == pg.K_SPACE: # スペースキーで武器を発射
-                    sound_effect.play()
-                    beams.add(weapon_system.fire())
-                elif event.key == pg.K_e: # 'e'キーでスペシャルショット発動
-                    sound_effect.play()
-                    special_shot_manager.activate(bird, score, enemies, beams)
-
-
-        # 1秒ごとに敵を出現
-        if tmr % 60 == 0:
-            for _ in range(min(1 + tmr // 600, 10)):
-                enemies.add(Enemy(bird, tmr))
+                if event.key == pg.K_SPACE:
+                    beams.append(Beam(bird)) # 通常ビームは"center"タイプで発射
+                if event.key == pg.K_LSHIFT: # シフトキーが押されたら
+                    # こうかとんの向きに応じて、3本のビームを発射
+                    beams.append(Beam(bird, "left")) 
+                    beams.append(Beam(bird, "center"))    
+                    beams.append(Beam(bird, "right"))
         
-        # 現在武器名を表示
-        font = pg.font.Font(None, 36) # フォントの設定
-        hud = font.render(f"Weapon: {weapon_system.current.name}", True, (255, 255, 255)) # 武器名を描画
-        screen.blit(hud, (10, 10)) # 画面左上に表示
-        
-        pg.display.update()
-        # ゲームオーバー判定
-        if pg.sprite.spritecollide(bird, enemies, True):
-            if bird.hp > 1:
-                bird.hp -= 1
-            elif bird.hp == 1:
-                print("Game Over!")
-                time.sleep(1)
-                return 0
-                
-        for emy in pg.sprite.groupcollide(enemies, beams, True, True).keys():  # ビームと衝突した敵機リスト
-            exps.add(Explosion(emy, 100))  # 爆発エフェクト
-            score.value += 10  # 10点アップ
-            score.gain_exp(5)
-            bird.change_img(6, screen)  # こうかとん喜びエフェクト
-
         screen.blit(bg_img, [0, 0])
+        
+        # こうかとんと爆弾の衝突判定
+        for bomb in bombs:
+            if bomb is not None and bird.rct.colliderect(bomb.rct):
+                bird.change_img(8, screen)
+                pg.display.update()
+                time.sleep(1)
+                return
+        
+        # 爆弾とビームの衝突判定ループ
+        for i, bomb in enumerate(bombs):
+            if bomb is None:
+                continue
+            for j, beam in enumerate(beams):
+                if beam is None:
+                    continue
+                if beam.rct.colliderect(bomb.rct):
+                    explosions.append(Explosion(bomb.rct))
+                    bombs[i] = None # 爆弾は消える
+                    bird.change_img(6, screen) # こうかとんの画像を一時的に変更
+                    score.value += 1 # スコア加算
+                    
+
+        beams = [beam for beam in beams if beam is not None]
+        bombs = [bomb for bomb in bombs if bomb is not None]
+        explosions = [exp for exp in explosions if exp is not None]
+
+        # 各オブジェクトの更新と描画
+        key_lst = pg.key.get_pressed()
         bird.update(key_lst, screen)
-        score.update(screen)
-        b_hp_ui.update(screen, bird)
         
-        beams.update()
-        beams.draw(screen)
-        enemies.update()
-        enemies.draw(screen)    
-        
-        tmr += 1
-        clock.tick(50)
-        exps.update()
-        exps.draw(screen)
-        
-        global save_score, save_lv
-        save_score = score.value
-        save_lv = score.lv
+        for beam in beams:
+            beam_result = beam.update(screen)
+            if beam_result is None:
+                beams.remove(beam) # 画面外に出たビームをリストから除去
 
+        for bomb in bombs:
+            bomb.update(screen)
 
-if __name__ == "__main__":
-    pg.init()
-    menu()
-    pg.quit()
-    sys.exit()
+        for exp in explosions:
+            exp_result = exp.update(screen)
+            if exp_result is None:
+                explosions.remove(exp) # 表示期間が終わった爆発エフェクトをリストから除去
+
+        score.update(screen) # スコア表示の更新
+        pg.display.update() # 画面の更新
+        tmr += 1 # 経過フレーム数を更新
+        clock.tick(50) 
+
+# --- プログラム実行 ---
+if __name__ == "__main__":  
+    pg.init()   # Pygameの初期化
+    main()      # ゲームの実行
+    pg.quit()   # Pygameの終了
+    sys.exit()  # プログラムの終了
