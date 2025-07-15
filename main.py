@@ -130,16 +130,19 @@ class Enemy(pg.sprite.Sprite):
     """
     def __init__(self, bird: Bird, tmr: int):
         super().__init__()
-        self.type = tmr // 600 % 3  # 時間に応じて種類を変える
+        self.type = random.randint(0, 2)  # ランダムに種類を変える
 
         if self.type == 0:
             self.image = pg.transform.rotozoom(pg.image.load("fig/alien1.png"), 0, 0.6)
+            self.image.fill((100, 255, 100, 255), special_flags=pg.BLEND_RGBA_MULT)
             self.speed = 2
         elif self.type == 1:
             self.image = pg.transform.rotozoom(pg.image.load("fig/alien2.png"), 0, 0.5)
+            self.image.fill((100, 100, 255, 255), special_flags=pg.BLEND_RGBA_MULT)
             self.speed = 3
         else:
             self.image = pg.transform.rotozoom(pg.image.load("fig/alien3.png"), 0, 0.4)
+            self.image.fill((255, 100, 100, 255), special_flags=pg.BLEND_RGBA_MULT)
             self.speed = 4
 
         self.rect = self.image.get_rect()
@@ -175,6 +178,7 @@ class Enemy(pg.sprite.Sprite):
             self.freeze_timer -= 1
             if self.freeze_timer <= 0:
                 self.unfreeze()
+
     def freeze(self):
         """敵を凍結状態にする"""
         self.is_frozen = True
@@ -207,6 +211,7 @@ class Beam(pg.sprite.Sprite):
         self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
         self.speed = 10
         self.is_special = is_special
+
     def update(self):
         """
         ビームを速度ベクトルself.vx, self.vyに基づき移動させる
@@ -218,6 +223,8 @@ class Beam(pg.sprite.Sprite):
                 self.kill()
             elif self.is_special and (self.rect.left > WIDTH + 50 or self.rect.right < -50 or self.rect.top > HEIGHT + 50 or self.rect.bottom < -50):
                 self.kill()
+
+
 class SpecialShot:
     """
     必殺技に関するクラス
@@ -281,7 +288,6 @@ class Score:
         self.font = pg.font.Font(None, 50)
         self.color = (0, 0, 255)
         self.value = 0
-        #self.exp = 0
         self.lv = 1
         self.next_exp = 10 # 次のレベルまでの経験値
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
@@ -443,7 +449,7 @@ def main(screen:pg.Surface):
     # 武器システム設定
     weapon_system = WeaponSystem(bird)
     weapon_system.add(Weapon("Beam", 0.15, lambda b: [Beam(b)])) # 通常のビームを放つ
-    weapon_system.add(Weapon("Spread", 0.8, lambda b: NeoBeam(b, 9).gen_beams())) # 9方向にビームを放つ
+    weapon_system.add(Weapon("Spread", 0.8, lambda b: NeoBeam(b, 3+int(score.lv//5)).gen_beams())) # 3+lvの数でビームを放つ
     special_shot_manager = SpecialShot() # SpecialShotインスタンスを作成
 
 
@@ -462,12 +468,13 @@ def main(screen:pg.Surface):
             if event.type == pg.QUIT: # ウィンドウの×ボタンで終了
                 return 0
             if event.type == pg.KEYDOWN:
-                sound_effect.play()
                 if event.key == pg.K_TAB: # TABキーで武器を切り替え
                     weapon_system.next()
                 elif event.key == pg.K_SPACE: # スペースキーで武器を発射
+                    sound_effect.play()
                     beams.add(weapon_system.fire())
                 elif event.key == pg.K_e: # 'e'キーでスペシャルショット発動
+                    sound_effect.play()
                     special_shot_manager.activate(bird, score, enemies, beams)
 
 
@@ -475,23 +482,6 @@ def main(screen:pg.Surface):
         if tmr % 60 == 0:
             for _ in range(min(1 + tmr // 600, 10)):
                 enemies.add(Enemy(bird, tmr))
-
-        screen.blit(bg_img, [0, 0])
-        bird.update(key_lst, screen)
-        score.update(screen)
-        b_hp_ui.update(screen)
-        
-        beams.update()
-        beams.draw(screen)
-        enemies.update()
-        enemies.draw(screen)
-        # ビームと敵の衝突判定
-        for beam in beams:
-            hit_enemies = pg.sprite.spritecollide(beam, enemies, True)
-            if hit_enemies:
-                beam.kill()
-                score.value += len(100 * hit_enemies)
-        score.update(screen)
         
         # 現在武器名を表示
         font = pg.font.Font(None, 36) # フォントの設定
@@ -508,13 +498,11 @@ def main(screen:pg.Surface):
                 time.sleep(1)
                 return 0
                 
-
         for emy in pg.sprite.groupcollide(enemies, beams, True, True).keys():  # ビームと衝突した敵機リスト
             exps.add(Explosion(emy, 100))  # 爆発エフェクト
             score.value += 10  # 10点アップ
             score.gain_exp(5)
             bird.change_img(6, screen)  # こうかとん喜びエフェクト
-
 
         screen.blit(bg_img, [0, 0])
         bird.update(key_lst, screen)
@@ -524,8 +512,7 @@ def main(screen:pg.Surface):
         beams.update()
         beams.draw(screen)
         enemies.update()
-        enemies.draw(screen)
-        
+        enemies.draw(screen)    
         
         tmr += 1
         clock.tick(50)
